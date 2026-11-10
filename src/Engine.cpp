@@ -107,6 +107,9 @@ bool Engine::init(int width, int height, const char* title) {
     // Camera starting bounds (player AABB).
     m_camera.setBounds({glm::vec3(-0.3f, 0.0f, -0.3f),
                         glm::vec3(0.3f, 1.8f, 0.3f)});
+    // Start above the terrain, looking down so the world is immediately visible.
+    m_camera.setPosition(glm::vec3(0.0f, 80.0f, 0.0f));
+    m_camera.setPitch(-20.0f);
 
     m_lastTime = glfwGetTime();
 

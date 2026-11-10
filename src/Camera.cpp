@@ -41,6 +41,11 @@ void Camera::processMouseMovement(float deltaX, float deltaY, bool constrainPitc
     updateVectors();
 }
 
+void Camera::setPitch(float degrees) {
+    m_pitch = std::clamp(degrees, -89.0f, 89.0f);
+    updateVectors();
+}
+
 bool Camera::update(float deltaTime, const AABB* worldBounds) {
     if (deltaTime <= 0.0f) return false;
 

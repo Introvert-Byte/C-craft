@@ -74,18 +74,22 @@ std::shared_future<void> World::generateChunkAsync(int chunkX, int chunkZ) {
 
     // Launch background generation. The chunk object is created here so the
     // main thread can reference it immediately; blocks are filled on the
-    // worker thread.
+    // worker thread. Mesh dirty-flag is set only after generation completes
+    // so we never mesh an all-air chunk (which would cause a black screen).
     auto chunk = std::make_unique<Chunk>(chunkX, chunkZ);
     Chunk* raw = chunk.get();
 
     std::future<void> fut = std::async(std::launch::async, [this, raw]() {
         generateChunkBlocks(*raw);
+        {
+            std::lock_guard<std::mutex> lock(m_mutex);
+            m_pendingMesh.insert(makeKey(raw->chunkX(), raw->chunkZ()));
+        }
     });
 
     m_chunks.emplace(key, std::move(chunk));
     auto shared = fut.share();
     m_generationFutures.emplace(key, shared);
-    markMeshDirty(chunkX, chunkZ);
 
     return shared;
 }

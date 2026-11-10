@@ -39,6 +39,9 @@ public:
     [[nodiscard]] float yaw() const { return m_yaw; }
     [[nodiscard]] float pitch() const { return m_pitch; }
 
+    void setPosition(const glm::vec3& position) { m_position = position; }
+    void setPitch(float degrees);
+
     [[nodiscard]] const AABB& bounds() const { return m_bounds; }
     void setBounds(const AABB& bounds) { m_bounds = bounds; }
 
