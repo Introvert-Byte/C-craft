@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <sstream>
 
 namespace voxel {
 
@@ -36,9 +37,9 @@ void Engine::setCreative(bool creative) {
         m_camera.sprintMultiplier = 1.0f;
         m_camera.gravity = 0.0f;
     } else {
-        m_camera.moveSpeed = 5.0f;
-        m_camera.sprintMultiplier = 2.0f;
-        m_camera.gravity = 28.0f;
+        m_camera.moveSpeed = 4.3f;
+        m_camera.sprintMultiplier = 1.7f;
+        m_camera.gravity = 32.0f;
     }
 }
 
@@ -77,6 +78,7 @@ bool Engine::init(int width, int height, const char* title) {
     glfwSetMouseButtonCallback(m_window, &Engine::mouseButtonCallback);
     glfwSetScrollCallback(m_window, &Engine::scrollCallback);
     glfwSetKeyCallback(m_window, &Engine::keyCallback);
+    glfwSetCharCallback(m_window, &Engine::charCallback);
 
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -106,6 +108,7 @@ bool Engine::init(int width, int height, const char* title) {
     m_camera.setPitch(-20.0f);
 
     m_lastTime = glfwGetTime();
+    m_fpsTime = m_lastTime;
 
     return true;
 }
@@ -191,17 +194,58 @@ void Engine::keyCallback(GLFWwindow* window, int key, int scancode, int action,
     if (key == GLFW_KEY_F3 && action == GLFW_PRESS) {
         engine->m_debugOverlay = !engine->m_debugOverlay;
     }
+
+    if (key == GLFW_KEY_F1 && action == GLFW_PRESS && !engine->m_f1Held) {
+        engine->m_f1Held = true;
+        engine->m_wireframe = !engine->m_wireframe;
+        glPolygonMode(GL_FRONT_AND_BACK,
+                      engine->m_wireframe ? GL_LINE : GL_FILL);
+    } else if (key == GLFW_KEY_F1 && action == GLFW_RELEASE) {
+        engine->m_f1Held = false;
+    }
+
+    // Hotbar number keys 1-9.
+    if ((engine->m_state == GameState::PLAYING ||
+         engine->m_state == GameState::CREATIVE) && action == GLFW_PRESS) {
+        if (key >= GLFW_KEY_1 && key <= GLFW_KEY_9) {
+            // Hotbar selection (visual only for now).
+        }
+    }
+}
+
+void Engine::charCallback(GLFWwindow* window, unsigned int codepoint) {
+    (void)window;
+    auto* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
+    if (!engine) return;
+
+    if (engine->m_newWorldActive) {
+        if (codepoint == 8) { // Backspace
+            if (!engine->m_newWorldName.empty())
+                engine->m_newWorldName.pop_back();
+        } else if (codepoint >= 32 && codepoint <= 126 &&
+                   engine->m_newWorldName.size() < 20) {
+            engine->m_newWorldName += static_cast<char>(codepoint);
+        }
+    }
 }
 
 int Engine::run() {
-    double lastFpsTime = glfwGetTime();
-    int frames = 0;
+    m_fpsTime = glfwGetTime();
 
     while (!glfwWindowShouldClose(m_window)) {
         double currentTime = glfwGetTime();
         float deltaTime = static_cast<float>(currentTime - m_lastTime);
         m_lastTime = currentTime;
         if (deltaTime > 0.1f) deltaTime = 0.1f;
+
+        // FPS tracking.
+        m_frameCount++;
+        if (currentTime - m_fpsTime >= 1.0) {
+            m_fps = static_cast<float>(m_frameCount) /
+                    static_cast<float>(currentTime - m_fpsTime);
+            m_frameCount = 0;
+            m_fpsTime = currentTime;
+        }
 
         switch (m_state) {
             case GameState::MAIN_MENU:
@@ -242,12 +286,6 @@ int Engine::run() {
 
         glfwSwapBuffers(m_window);
         glfwPollEvents();
-
-        ++frames;
-        if (currentTime - lastFpsTime >= 1.0) {
-            frames = 0;
-            lastFpsTime = currentTime;
-        }
     }
 
     shutdown();
@@ -270,21 +308,22 @@ void Engine::renderMainMenu() {
 
     m_font.begin(m_width, m_height);
 
-    m_font.drawText(m_width * 0.5f - 100.0f, m_height * 0.25f,
-                    "C+CRAFT", 2.5f, glm::vec3(0.4f, 0.8f, 1.0f));
-    m_font.drawText(m_width * 0.5f - 140.0f, m_height * 0.25f + 42.0f,
+    // Title.
+    m_font.drawText(m_width * 0.5f - 90.0f, m_height * 0.22f,
+                    "C+CRAFT", 3.0f, glm::vec3(0.3f, 0.75f, 1.0f));
+    m_font.drawText(m_width * 0.5f - 150.0f, m_height * 0.22f + 44.0f,
                     "Voxel Engine Foundation (C++20)", 1.0f,
                     glm::vec3(0.8f, 0.8f, 0.8f));
 
-    float bw = 240.0f, bh = 44.0f;
+    float bw = 260.0f, bh = 46.0f;
     float bx = m_width * 0.5f - bw * 0.5f;
-    float by = m_height * 0.42f;
+    float by = m_height * 0.44f;
 
     m_menuButtons.clear();
     m_menuButtons.emplace_back("Singleplayer", bx, by, bw, bh);
-    m_menuButtons.emplace_back("Creative Mode", bx, by + bh + 14.0f, bw, bh);
-    m_menuButtons.emplace_back("Worlds", bx, by + 2 * (bh + 14.0f), bw, bh);
-    m_menuButtons.emplace_back("Quit", bx, by + 3 * (bh + 14.0f), bw, bh);
+    m_menuButtons.emplace_back("Creative Mode", bx, by + bh + 16.0f, bw, bh);
+    m_menuButtons.emplace_back("Worlds", bx, by + 2 * (bh + 16.0f), bw, bh);
+    m_menuButtons.emplace_back("Quit", bx, by + 3 * (bh + 16.0f), bw, bh);
 
     double clickTime = glfwGetTime();
     bool justClicked = (clickTime - m_lastClickTime < 0.15f);
@@ -299,9 +338,9 @@ void Engine::renderMainMenu() {
     }
 
     for (auto& b : m_menuButtons) {
-        glm::vec3 col = b.hovered ? glm::vec3(0.5f, 0.8f, 1.0f)
-                                  : glm::vec3(0.9f, 0.9f, 0.9f);
-        m_font.drawText(b.x + 14.0f, b.y + 10.0f, b.label, 1.3f, col);
+        glm::vec3 col = b.hovered ? glm::vec3(0.4f, 0.7f, 1.0f)
+                                  : glm::vec3(0.95f, 0.95f, 0.95f);
+        m_font.drawText(b.x + 16.0f, b.y + 11.0f, b.label, 1.4f, col);
 
         if (b.hovered && justClicked) {
             b.clicked = true;
@@ -333,25 +372,25 @@ void Engine::renderWorldMenu() {
 
     m_font.begin(m_width, m_height);
 
-    m_font.drawText(m_width * 0.5f - 90.0f, m_height * 0.15f,
-                    "SELECT WORLD", 1.8f, glm::vec3(0.4f, 0.8f, 1.0f));
+    m_font.drawText(m_width * 0.5f - 95.0f, m_height * 0.16f,
+                    "SELECT WORLD", 2.0f, glm::vec3(0.3f, 0.75f, 1.0f));
 
     auto worlds = m_save.listWorlds();
-    float wy = m_height * 0.30f;
+    float wy = m_height * 0.32f;
     m_worldButtons.clear();
 
     for (const auto& info : worlds) {
-        float bw = 320.0f, bh = 36.0f;
+        float bw = 340.0f, bh = 38.0f;
         float bx = m_width * 0.5f - bw * 0.5f;
         m_worldButtons.emplace_back(info.name, bx, wy, bw, bh);
-        wy += bh + 10.0f;
+        wy += bh + 12.0f;
     }
 
-    float btnY = wy + 20.0f;
-    m_worldButtons.emplace_back("Create New", m_width * 0.5f - 150.0f, btnY,
-                                130.0f, 36.0f);
+    float btnY = wy + 22.0f;
+    m_worldButtons.emplace_back("Create New", m_width * 0.5f - 160.0f, btnY,
+                                140.0f, 38.0f);
     m_worldButtons.emplace_back("Back", m_width * 0.5f + 20.0f, btnY, 100.0f,
-                                36.0f);
+                                38.0f);
 
     double clickTime = glfwGetTime();
     bool justClicked = (clickTime - m_lastClickTime < 0.15f);
@@ -366,9 +405,9 @@ void Engine::renderWorldMenu() {
     }
 
     for (auto& b : m_worldButtons) {
-        glm::vec3 col = b.hovered ? glm::vec3(0.5f, 0.8f, 1.0f)
-                                  : glm::vec3(0.9f, 0.9f, 0.9f);
-        m_font.drawText(b.x + 14.0f, b.y + 10.0f, b.label, 1.2f, col);
+        glm::vec3 col = b.hovered ? glm::vec3(0.4f, 0.7f, 1.0f)
+                                  : glm::vec3(0.95f, 0.95f, 0.95f);
+        m_font.drawText(b.x + 16.0f, b.y + 11.0f, b.label, 1.3f, col);
 
         if (b.hovered && justClicked) {
             b.clicked = true;
@@ -376,9 +415,12 @@ void Engine::renderWorldMenu() {
     }
 
     if (m_newWorldActive) {
-        m_font.drawText(m_width * 0.5f - 110.0f, btnY + 50.0f,
-                        "Name: " + m_newWorldName + "_", 1.2f,
-                        glm::vec3(1.0f, 1.0f, 0.0f));
+        m_font.drawText(m_width * 0.5f - 130.0f, btnY + 55.0f,
+                        "World name: " + m_newWorldName + "_", 1.3f,
+                        glm::vec3(1.0f, 1.0f, 0.4f));
+        m_font.drawText(m_width * 0.5f - 130.0f, btnY + 85.0f,
+                        "Press Enter to create, Esc to cancel", 0.9f,
+                        glm::vec3(0.7f, 0.7f, 0.7f));
     }
 
     if (justClicked) {
@@ -446,7 +488,7 @@ void Engine::renderPlaying() {
     m_shader.setUniformMatrix4fv("uView", view);
     m_shader.setUniformMatrix4fv("uModel", model);
 
-    glm::vec3 lightPos(50.0f, 100.0f, 50.0f);
+    glm::vec3 lightPos(50.0f, 120.0f, 50.0f);
     m_shader.setUniform3f("uLightPos", lightPos);
     m_shader.setUniformVec3("uLightColor", 1.0f, 1.0f, 0.95f);
     m_shader.setUniform3f("uViewPos", m_camera.position());
@@ -471,19 +513,39 @@ void Engine::renderPlaying() {
     }
     glCheckError("playing render");
 
+    renderHUD();
+}
+
+void Engine::renderHUD() {
     m_font.begin(m_width, m_height);
+
+    // Crosshair (center of screen).
+    int cx = m_width / 2;
+    int cy = m_height / 2;
+    m_font.drawText(cx - 2, cy - 4, "+", 1.5f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // Coordinates.
     glm::vec3 pos = m_camera.position();
     char buf[128];
     std::snprintf(buf, sizeof(buf), "XYZ: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
-    m_font.drawText(10.0f, 10.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.drawText(10.0f, 10.0f, buf, 1.1f, glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // Mode.
     std::snprintf(buf, sizeof(buf), "%s",
                   m_creativeMode ? "CREATIVE MODE" : "SURVIVAL MODE");
-    m_font.drawText(10.0f, 30.0f, buf, 1.0f,
-                    m_creativeMode ? glm::vec3(0.0f, 1.0f, 0.0f)
+    m_font.drawText(10.0f, 30.0f, buf, 1.1f,
+                    m_creativeMode ? glm::vec3(0.2f, 1.0f, 0.2f)
                                    : glm::vec3(1.0f, 1.0f, 1.0f));
+
+    // Hotbar background hint.
+    m_font.drawText(m_width * 0.5f - 60.0f, m_height - 30.0f,
+                    "[1] [2] [3] [4] [5] [6] [7] [8] [9]", 1.0f,
+                    glm::vec3(0.6f, 0.6f, 0.6f));
+
     m_font.drawText(10.0f, m_height - 20.0f,
-                    "Press F3 for debug  |  ESC for menu", 0.8f,
+                    "F3=Debug  F1=Wireframe  ESC=Menu", 0.9f,
                     glm::vec3(0.7f, 0.7f, 0.7f));
+
     m_font.end();
 }
 
@@ -491,7 +553,7 @@ void Engine::renderPaused() {
     renderPlaying();
 
     m_font.begin(m_width, m_height);
-    m_font.drawText(m_width * 0.5f - 60.0f, m_height * 0.45f, "PAUSED", 2.0f,
+    m_font.drawText(m_width * 0.5f - 60.0f, m_height * 0.45f, "PAUSED", 2.2f,
                     glm::vec3(1.0f, 1.0f, 1.0f));
     m_font.end();
 }
@@ -515,15 +577,16 @@ void Engine::renderDebugOverlay() {
         }
     }
 
-    std::snprintf(buf, sizeof(buf), "F3 Debug:");
-    m_font.drawText(10.0f, 60.0f, buf, 1.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+    m_font.drawText(10.0f, 60.0f, "F3 Debug:", 1.1f, glm::vec3(0.2f, 1.0f, 0.2f));
+    std::snprintf(buf, sizeof(buf), "  FPS: %.1f", m_fps);
+    m_font.drawText(10.0f, 80.0f, buf, 1.1f, glm::vec3(1.0f, 1.0f, 1.0f));
     std::snprintf(buf, sizeof(buf), "  Pos: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
-    m_font.drawText(10.0f, 80.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.drawText(10.0f, 100.0f, buf, 1.1f, glm::vec3(1.0f, 1.0f, 1.0f));
     std::snprintf(buf, sizeof(buf), "  Chunks: %d  Vertices: %d", chunks, verts);
-    m_font.drawText(10.0f, 100.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.drawText(10.0f, 120.0f, buf, 1.1f, glm::vec3(1.0f, 1.0f, 1.0f));
     std::snprintf(buf, sizeof(buf), "  Mode: %s",
                   m_creativeMode ? "CREATIVE" : "SURVIVAL");
-    m_font.drawText(10.0f, 120.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.drawText(10.0f, 140.0f, buf, 1.1f, glm::vec3(1.0f, 1.0f, 1.0f));
 
     m_font.end();
 }
@@ -547,6 +610,7 @@ void Engine::updateChunks() {
     int px = static_cast<int>(std::floor(p.x / Chunk::WIDTH));
     int pz = static_cast<int>(std::floor(p.z / Chunk::DEPTH));
 
+    // Generate chunks in background (limited per frame to prevent stutter).
     for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE && generated < MAX_GEN_PER_FRAME;
          ++z) {
         for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE && generated < MAX_GEN_PER_FRAME;
@@ -560,6 +624,7 @@ void Engine::updateChunks() {
         }
     }
 
+    // Build meshes on main thread (limited per frame for smooth FPS).
     for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE && meshed < MAX_MESH_PER_FRAME;
          ++z) {
         for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE && meshed < MAX_MESH_PER_FRAME;
@@ -581,8 +646,9 @@ void Engine::handleBlockInteraction() {
     glm::vec3 camFront = m_camera.front();
 
     constexpr float MAX_DIST = 6.0f;
-    constexpr float STEP = 0.2f;
+    constexpr float STEP = 0.15f;
     glm::vec3 hitBlock(0.0f);
+    glm::vec3 hitNormal(0.0f);
     bool found = false;
 
     for (float d = 0.0f; d < MAX_DIST; d += STEP) {
@@ -600,23 +666,34 @@ void Engine::handleBlockInteraction() {
 
     double now = glfwGetTime();
 
+    // Left click: break block.
     if (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
         found && now - m_lastClickTime > 0.15) {
         m_world.setBlock((int)hitBlock.x, (int)hitBlock.y, (int)hitBlock.z,
                          BLOCK_AIR);
         int cx = (int)hitBlock.x / Chunk::WIDTH;
         int cz = (int)hitBlock.z / Chunk::DEPTH;
-        m_world.markMeshDirty(cx, cz);
+        // Remesh neighboring chunks too.
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dz = -1; dz <= 1; ++dz) {
+                m_world.markMeshDirty(cx + dx, cz + dz);
+            }
+        }
         m_lastClickTime = now;
     }
 
+    // Right click: place block (creative only).
     if (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS &&
         found && m_creativeMode && now - m_lastClickTime > 0.15) {
         m_world.setBlock((int)hitBlock.x, (int)hitBlock.y + 1,
                          (int)hitBlock.z, BLOCK_GRASS);
         int cx = (int)hitBlock.x / Chunk::WIDTH;
         int cz = (int)hitBlock.z / Chunk::DEPTH;
-        m_world.markMeshDirty(cx, cz);
+        for (int dx = -1; dx <= 1; ++dx) {
+            for (int dz = -1; dz <= 1; ++dz) {
+                m_world.markMeshDirty(cx + dx, cz + dz);
+            }
+        }
         m_lastClickTime = now;
     }
 }

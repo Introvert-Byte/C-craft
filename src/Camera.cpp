@@ -31,6 +31,11 @@ void Camera::updateVectors() {
     m_up = glm::normalize(glm::cross(m_right, m_front));
 }
 
+void Camera::setPosition(const glm::vec3& pos) {
+    m_position = pos;
+    updateVectors();
+}
+
 void Camera::processMouseMovement(float deltaX, float deltaY) {
     m_yaw += deltaX * mouseSensitivity;
     m_pitch -= deltaY * mouseSensitivity;
@@ -62,9 +67,10 @@ bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
     bool hasSolids = solids && !solids->empty();
     bool moved = false;
 
-    // Horizontal movement with collision.
+    // Horizontal movement with sliding collision.
     glm::vec3 newPos = m_position + displacement;
     if (hasSolids) {
+        // Try full movement.
         AABB box{newPos + m_bounds.min, newPos + m_bounds.max};
         bool hit = false;
         for (const auto& s : *solids) {
@@ -74,7 +80,7 @@ bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
             m_position = newPos;
             moved = true;
         } else {
-            // Slide along X.
+            // Slide along X only.
             glm::vec3 tryX = m_position + glm::vec3(displacement.x, 0.0f, 0.0f);
             AABB bx{tryX + m_bounds.min, tryX + m_bounds.max};
             bool hx = false;
@@ -83,7 +89,7 @@ bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
             }
             if (!hx) { m_position = tryX; moved = true; }
 
-            // Slide along Z.
+            // Slide along Z only.
             glm::vec3 tryZ = m_position + glm::vec3(0.0f, 0.0f, displacement.z);
             AABB bz{tryZ + m_bounds.min, tryZ + m_bounds.max};
             bool hz = false;
@@ -97,7 +103,7 @@ bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
         moved = true;
     }
 
-    // Vertical movement.
+    // Vertical movement with collision.
     if (hasSolids) {
         glm::vec3 tryY = m_position + glm::vec3(0.0f, m_verticalVelocity * deltaTime, 0.0f);
         AABB nextY{tryY + m_bounds.min, tryY + m_bounds.max};
@@ -111,8 +117,10 @@ bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
             moved = true;
         } else {
             if (m_verticalVelocity < 0.0f) {
+                // Land on top of block.
                 m_position.y = std::floor(hitBlock->max.y - m_bounds.min.y) + 0.001f;
             } else {
+                // Hit head.
                 m_position.y = std::ceil(hitBlock->min.y - m_bounds.max.y) - 0.001f;
             }
             m_verticalVelocity = 0.0f;

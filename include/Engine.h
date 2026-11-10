@@ -36,6 +36,9 @@ public:
     [[nodiscard]] bool isCreative() const { return m_creativeMode; }
     void setCreative(bool creative);
 
+    [[nodiscard]] bool debugOverlay() const { return m_debugOverlay; }
+    void setDebugOverlay(bool v) { m_debugOverlay = v; }
+
 private:
     void updateMainMenu(float deltaTime);
     void updateWorldMenu(float deltaTime);
@@ -46,6 +49,7 @@ private:
     void renderWorldMenu();
     void renderPlaying();
     void renderPaused();
+    void renderHUD();
     void renderDebugOverlay();
 
     void loadChunksAroundPlayer();
@@ -61,6 +65,7 @@ private:
     GameState m_state = GameState::MAIN_MENU;
     bool m_creativeMode = false;
     bool m_debugOverlay = false;
+    bool m_wireframe = false;
 
     Shader m_shader;
     TextureAtlas m_atlas;
@@ -70,6 +75,9 @@ private:
     WorldSave m_save;
 
     double m_lastTime = 0.0;
+    double m_fpsTime = 0.0;
+    int m_frameCount = 0;
+    float m_fps = 0.0f;
 
     std::vector<UIButton> m_menuButtons;
     std::vector<UIButton> m_worldButtons;
@@ -79,9 +87,9 @@ private:
     int m_hoveredButton = -1;
     double m_lastClickTime = 0.0;
 
-    static constexpr int RENDER_DISTANCE = 6;
+    static constexpr int RENDER_DISTANCE = 8;
     static constexpr int MAX_GEN_PER_FRAME = 2;
-    static constexpr int MAX_MESH_PER_FRAME = 2;
+    static constexpr int MAX_MESH_PER_FRAME = 4;
 
     bool m_firstMouse = true;
     double m_lastX = 0.0;
@@ -89,13 +97,13 @@ private:
     bool m_cursorCaptured = false;
     bool m_f1Held = false;
     bool m_escHeld = false;
-    bool m_wireframe = false;
 
     static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
     static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
     static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
     static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
     static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
+    static void charCallback(GLFWwindow* window, unsigned int codepoint);
 };
 
 } // namespace voxel

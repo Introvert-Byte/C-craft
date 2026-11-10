@@ -3,6 +3,7 @@
 #include <glad/glad.h>
 #include <glm/glm.hpp>
 #include <cstdint>
+#include <vector>
 
 #include "Block.h"
 
@@ -11,7 +12,10 @@ namespace voxel {
 class TextureAtlas {
 public:
     TextureAtlas();
+    ~TextureAtlas();
 
+    // Build a procedural atlas with Minecraft-style block textures.
+    // No external image files needed - generates grass, dirt, stone, etc.
     void buildProcedural(std::uint32_t tileSize = 16,
                          std::uint32_t tilesPerRow = 16);
 

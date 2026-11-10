@@ -37,6 +37,8 @@ public:
 
     bool isSolid(int x, int y, int z) const;
 
+    // Greedy meshing: combines adjacent coplanar faces into large quads.
+    // This dramatically reduces vertex count and fixes the lag.
     void buildMesh(const TextureAtlas& atlas,
                    std::function<bool(int x, int y, int z)> solidOutside = nullptr);
 
@@ -47,6 +49,7 @@ public:
     void setMeshDirty(bool dirty = true) { m_meshDirty = dirty; }
 
     [[nodiscard]] GLsizei vertexCount() const { return m_vertexCount; }
+    [[nodiscard]] GLsizei indexCount() const { return m_indexCount; }
 
     glm::vec3 origin() const {
         return glm::vec3(static_cast<float>(m_chunkX) * WIDTH, 0.0f,
@@ -60,14 +63,17 @@ private:
 
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
+    GLuint m_ebo = 0;
     GLsizei m_vertexCount = 0;
+    GLsizei m_indexCount = 0;
     bool m_meshDirty = true;
 
     static inline int indexOf(int x, int y, int z) {
         return y * (WIDTH * DEPTH) + z * WIDTH + x;
     }
 
-    void uploadMesh(const std::vector<float>& vertices);
+    void uploadMesh(const std::vector<float>& vertices,
+                    const std::vector<unsigned int>& indices);
 };
 
 using ChunkPtr = std::unique_ptr<Chunk>;

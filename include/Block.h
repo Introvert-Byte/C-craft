@@ -1,7 +1,9 @@
 #pragma once
 
 #include <cstdint>
+#include <string>
 #include <string_view>
+#include <array>
 
 namespace voxel {
 
@@ -14,6 +16,11 @@ constexpr BlockID BLOCK_STONE = 3;
 constexpr BlockID BLOCK_SAND = 4;
 constexpr BlockID BLOCK_WOOD = 5;
 constexpr BlockID BLOCK_LEAVES = 6;
+constexpr BlockID BLOCK_WATER = 7;
+constexpr BlockID BLOCK_COAL_ORE = 8;
+constexpr BlockID BLOCK_IRON_ORE = 9;
+constexpr BlockID BLOCK_GOLD_ORE = 10;
+constexpr BlockID BLOCK_DIAMOND_ORE = 11;
 
 enum class Face : std::uint8_t {
     TOP = 0,
@@ -30,6 +37,8 @@ struct BlockProperties {
     std::string_view name = "air";
     bool solid = false;
     bool opaque = false;
+    // Texture indices per face in the atlas
+    std::array<int, 6> faceTexture = {-1, -1, -1, -1, -1, -1};
 };
 
 class BlockRegistry {
@@ -38,6 +47,7 @@ public:
     const BlockProperties& get(BlockID id) const;
     bool isSolid(BlockID id) const;
     bool isOpaque(BlockID id) const;
+    int getFaceTexture(BlockID id, Face face) const;
 
 private:
     BlockProperties m_entries[256];

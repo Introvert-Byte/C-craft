@@ -38,7 +38,7 @@ public:
     [[nodiscard]] const AABB& bounds() const { return m_bounds; }
     void setBounds(const AABB& bounds) { m_bounds = bounds; }
 
-    void setPosition(const glm::vec3& pos) { m_position = pos; updateVectors(); }
+    void setPosition(const glm::vec3& pos);
     void setYaw(float y) { m_yaw = y; updateVectors(); }
     void setPitch(float p) { m_pitch = std::clamp(p, -89.0f, 89.0f); updateVectors(); }
 
@@ -53,11 +53,11 @@ public:
 
     bool update(float deltaTime, const std::vector<AABB>* solids = nullptr);
 
-    float moveSpeed = 5.0f;
-    float sprintMultiplier = 2.0f;
-    float jumpVelocity = 7.5f;
-    float gravity = 28.0f;
-    float mouseSensitivity = 0.15f;
+    float moveSpeed = 4.3f;
+    float sprintMultiplier = 1.7f;
+    float jumpVelocity = 7.8f;
+    float gravity = 32.0f;
+    float mouseSensitivity = 0.14f;
 
 private:
     void updateVectors();
@@ -69,7 +69,7 @@ private:
     glm::vec3 m_worldUp = glm::vec3(0.0f, 1.0f, 0.0f);
 
     float m_yaw = -90.0f;
-    float m_pitch = -15.0f;
+    float m_pitch = -10.0f;
 
     float m_verticalVelocity = 0.0f;
     bool m_onGround = false;
