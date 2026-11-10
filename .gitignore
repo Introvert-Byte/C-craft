@@ -1,0 +1,70 @@
+# =============================================================================
+# C+craft - Voxel Engine Foundation
+# Git ignore rules
+# =============================================================================
+
+# --- Build / binary outputs -------------------------------------------------
+/build/
+build/
+bin/
+C+craft
+*.exe
+*.out
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+*.o
+*.obj
+*.a
+*.lib
+*.so
+*.so.*
+*.dylib
+
+# --- CMake generated files --------------------------------------------------
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+cmake_install.cmake
+install_manifest.txt
+Makefile
+CTestTestfile.cmake
+compile_commands.json
+*.cmake
+
+# --- IDE / editor configurations --------------------------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.bak
+.DS_Store
+.*.un~
+project.lock.json
+.classpath
+.project
+.settings/
+
+# --- Machine-specific / locally-built dependencies --------------------------
+# These are built/fetched on each machine; do not commit them.
+deps/glfw-install/
+deps/glfw/build/
+deps/lib/
+deps/glfw/CMakeCache.txt
+deps/glfw/CMakeFiles/
+
+# --- Logs / temporary -------------------------------------------------------
+*.log
+*.tmp
+*.temp
+/tmp/
+
+# --- OS ---------------------------------------------------------------------
+Thumbs.db
+ehthumbs.db
+__MACOSX/
