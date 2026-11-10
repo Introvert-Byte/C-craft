@@ -40,7 +40,6 @@ void fillTile(std::vector<std::uint8_t>& px, std::uint32_t tileSize,
             const std::uint32_t oy = tileY * tileSize + y;
             const std::uint32_t i = oy * stride + ox * 4;
 
-            // Face-dependent tint so top/side/bottom read differently.
             glm::vec4 color = base;
             switch (face) {
                 case Face::TOP:    color *= glm::vec4(1.05f, 1.05f, 0.9f, 1.0f); break;
@@ -52,12 +51,10 @@ void fillTile(std::vector<std::uint8_t>& px, std::uint32_t tileSize,
                 default: break;
             }
 
-            // Subtle noise for grain.
             std::uint32_t n = xorshift32() % 40;
             float grain = (n - 20) / 255.0f;
             color = glm::clamp(color + glm::vec4(grain, grain, grain, 0.0f), 0.0f, 1.0f);
 
-            // Dirt-grass boundary on the side of grass blocks.
             if (id == BLOCK_GRASS && face == Face::RIGHT && y > tileSize * 2 / 3) {
                 color = blockBaseColor(BLOCK_DIRT);
                 color *= glm::vec4(0.9f, 0.9f, 0.9f, 1.0f);
@@ -74,13 +71,16 @@ void fillTile(std::vector<std::uint8_t>& px, std::uint32_t tileSize,
 
 TextureAtlas::TextureAtlas() = default;
 
-void TextureAtlas::buildProcedural(std::uint32_t tileSize, std::uint32_t tilesPerRow) {
+void TextureAtlas::buildProcedural(std::uint32_t tileSize,
+                                   std::uint32_t tilesPerRow) {
     m_tileSize = tileSize;
     m_tilesPerRow = tilesPerRow;
 
     // Assign tile indices: 6 faces per block id.
+    // Note: use `int` for the loop variable since BlockID (uint8_t) would
+    // overflow at 256 and create an infinite loop.
     std::uint32_t nextTile = 0;
-    for (BlockID id = 0; id < 256; ++id) {
+    for (int id = 0; id < 256; ++id) {
         for (std::uint32_t f = 0; f < 6; ++f) {
             m_tileIndex[id][f] = nextTile++;
         }
@@ -111,13 +111,10 @@ void TextureAtlas::buildProcedural(std::uint32_t tileSize, std::uint32_t tilesPe
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_atlasWidth, m_atlasHeight, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, px.data());
-    glGenerateMipmap(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 bool TextureAtlas::loadFromFile(const char* /*path*/, std::uint32_t /*tileSize*/) {
-    // Real image loading (e.g. stb_image) can be wired here. For now fall back
-    // to the procedural atlas so the engine runs without any image assets.
     return false;
 }
 

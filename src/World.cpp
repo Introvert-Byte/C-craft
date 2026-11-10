@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 #include <thread>
 
 namespace voxel {
@@ -104,6 +105,15 @@ Chunk* World::getChunkOrLoad(int chunkX, int chunkZ) {
     if (Chunk* c = getChunk(chunkX, chunkZ)) return c;
     generateChunkAsync(chunkX, chunkZ);
     return getChunk(chunkX, chunkZ);
+}
+
+void World::forEachChunk(std::function<void(int, int, Chunk*)> fn) const {
+    std::lock_guard<std::mutex> lock(m_mutex);
+    for (const auto& [key, chunk] : m_chunks) {
+        int cx = static_cast<int>(key >> 32);
+        int cz = static_cast<int>(static_cast<std::uint32_t>(key));
+        fn(cx, cz, chunk.get());
+    }
 }
 
 BlockID World::getBlock(int worldX, int worldY, int worldZ) const {

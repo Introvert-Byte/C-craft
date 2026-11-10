@@ -1,5 +1,6 @@
 #pragma once
 
+#include <atomic>
 #include <array>
 #include <cstdint>
 #include <functional>
@@ -54,6 +55,7 @@ public:
     void render() const;
 
     bool hasMesh() const { return m_vertexCount > 0; }
+    [[nodiscard]] GLsizei vertexCount() const { return m_vertexCount; }
     bool meshDirty() const { return m_meshDirty; }
     void setMeshDirty(bool dirty = true) { m_meshDirty = dirty; }
 
@@ -73,7 +75,7 @@ private:
     GLuint m_vao = 0;
     GLuint m_vbo = 0;
     GLsizei m_vertexCount = 0;
-    bool m_meshDirty = true;
+    std::atomic<bool> m_meshDirty{true};
 
     static inline int indexOf(int x, int y, int z) {
         return y * (WIDTH * DEPTH) + z * WIDTH + x;

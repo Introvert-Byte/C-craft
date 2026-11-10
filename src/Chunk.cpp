@@ -29,18 +29,20 @@ constexpr std::array<glm::vec3, 6> faceNormals = {{
 }};
 
 // For each face, the four corner offsets (x, y, z) forming a unit quad.
+// Winding is counter-clockwise when viewed from the outside (along the face
+// normal), so faces are front-facing and not culled by glCullFace(GL_BACK).
 constexpr std::array<std::array<glm::ivec3, 4>, 6> faceCorners = {{
-    // TOP:     y = +1 face
-    {{{0,1,0},{1,1,0},{1,1,1},{0,1,1}}},
-    // BOTTOM:  y = 0 face
-    {{{0,0,0},{0,0,1},{1,0,1},{1,0,0}}},
-    // LEFT:    x = 0 face
+    // TOP:     y = +1 face, normal (0,1,0)
+    {{{0,1,0},{0,1,1},{1,1,1},{1,1,0}}},
+    // BOTTOM:  y = 0 face, normal (0,-1,0)
+    {{{0,0,0},{1,0,0},{1,0,1},{0,0,1}}},
+    // LEFT:    x = 0 face, normal (-1,0,0)
     {{{0,0,0},{0,0,1},{0,1,1},{0,1,0}}},
-    // RIGHT:   x = +1 face
+    // RIGHT:   x = +1 face, normal (1,0,0)
     {{{1,0,1},{1,0,0},{1,1,0},{1,1,1}}},
-    // FRONT:   z = +1 face
+    // FRONT:   z = +1 face, normal (0,0,1)
     {{{0,0,1},{1,0,1},{1,1,1},{0,1,1}}},
-    // BACK:    z = 0 face
+    // BACK:    z = 0 face, normal (0,0,-1)
     {{{1,0,0},{0,0,0},{0,1,0},{1,1,0}}},
 }};
 } // namespace

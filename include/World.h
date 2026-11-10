@@ -38,6 +38,9 @@ public:
     // supplied texture atlas for face UVs.
     void buildChunkMesh(const TextureAtlas& atlas, int chunkX, int chunkZ);
 
+    // Iterate all loaded chunks (for saving). `fn` receives (cx, cz, Chunk*).
+    void forEachChunk(std::function<void(int, int, Chunk*)> fn) const;
+
     // Block read across chunk boundaries.
     BlockID getBlock(int worldX, int worldY, int worldZ) const;
     void setBlock(int worldX, int worldY, int worldZ, BlockID id);

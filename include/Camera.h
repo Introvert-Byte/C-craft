@@ -57,8 +57,8 @@ public:
     void processMouseMovement(float deltaX, float deltaY, bool constrainPitch = true);
 
     // Update camera position / orientation over a time step. Returns true if
-    // the camera moved (useful to trigger chunk updates).
-    bool update(float deltaTime, const AABB* worldBounds = nullptr);
+    // the camera moved. `solids` are nearby solid block AABBs for collision.
+    bool update(float deltaTime, const std::vector<AABB>* solids = nullptr);
 
     // Resolve the camera AABB against a set of solid world AABBs and push the
     // camera out of any overlaps (simple positional resolution).

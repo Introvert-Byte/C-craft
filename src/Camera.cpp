@@ -46,7 +46,7 @@ void Camera::setPitch(float degrees) {
     updateVectors();
 }
 
-bool Camera::update(float deltaTime, const AABB* worldBounds) {
+bool Camera::update(float deltaTime, const std::vector<AABB>* solids) {
     if (deltaTime <= 0.0f) return false;
 
     float speed = moveSpeed * deltaTime;
@@ -73,54 +73,69 @@ bool Camera::update(float deltaTime, const AABB* worldBounds) {
 
     bool moved = glm::length(movement) > 1e-4f;
 
-    // Apply movement then resolve against provided world AABBs.
-    glm::vec3 newPosition = m_position + movement;
+    // If no solid blocks are available yet (chunks still generating), hover
+    // in place instead of falling through the world.
+    bool hasSolids = solids && !solids->empty();
 
-    if (worldBounds) {
-        // Horizontal movement with sliding resolution.
-        glm::vec3 horiz = m_position + displacement;
-        if (!worldBounds->intersects(AABB{horiz + m_bounds.min, horiz + m_bounds.max})) {
-            m_position = horiz;
-            moved = true;
-        } else {
-            // Try sliding along X then Z.
-            glm::vec3 tryX = m_position + glm::vec3(displacement.x, 0.0f, 0.0f);
-            if (!worldBounds->intersects(AABB{tryX + m_bounds.min, tryX + m_bounds.max})) {
-                m_position = tryX;
-            }
-            glm::vec3 tryZ = m_position + glm::vec3(0.0f, 0.0f, displacement.z);
-            if (!worldBounds->intersects(AABB{tryZ + m_bounds.min, tryZ + m_bounds.max})) {
-                m_position = tryZ;
-            }
+    // Apply horizontal movement with collision resolution.
+    glm::vec3 newPosition = m_position + displacement;
+    if (hasSolids) {
+        // Try full horizontal move.
+        AABB horizBox{newPosition + m_bounds.min, newPosition + m_bounds.max};
+        bool collides = false;
+        for (const auto& s : *solids) {
+            if (horizBox.intersects(s)) { collides = true; break; }
         }
-
-        // Vertical movement.
-        glm::vec3 tryY = m_position + glm::vec3(0.0f, m_verticalVelocity * deltaTime, 0.0f);
-        AABB nextY{tryY + m_bounds.min, tryY + m_bounds.max};
-        if (!worldBounds->intersects(nextY)) {
-            m_position = tryY;
+        if (!collides) {
+            m_position = newPosition;
         } else {
-            // Collided vertically: snap to surface and reset velocity.
-            if (m_verticalVelocity < 0.0f) {
-                // Falling: sit on top of the block.
-                m_position.y = std::floor(worldBounds->max.y - m_bounds.min.y) + 0.001f;
-            } else {
-                // Rising: hit head, push down.
-                m_position.y = std::ceil(worldBounds->min.y - m_bounds.max.y) - 0.001f;
+            // Try sliding along X only.
+            glm::vec3 tryX = m_position + glm::vec3(displacement.x, 0.0f, 0.0f);
+            AABB boxX{tryX + m_bounds.min, tryX + m_bounds.max};
+            bool collidesX = false;
+            for (const auto& s : *solids) {
+                if (boxX.intersects(s)) { collidesX = true; break; }
             }
-            m_verticalVelocity = 0.0f;
-            if (m_verticalVelocity == 0.0f && gravityAccel.y < 0.0f) m_onGround = true;
+            if (!collidesX) m_position = tryX;
+            // Try sliding along Z only.
+            glm::vec3 tryZ = m_position + glm::vec3(0.0f, 0.0f, displacement.z);
+            AABB boxZ{tryZ + m_bounds.min, tryZ + m_bounds.max};
+            bool collidesZ = false;
+            for (const auto& s : *solids) {
+                if (boxZ.intersects(s)) { collidesZ = true; break; }
+            }
+            if (!collidesZ) m_position = tryZ;
         }
     } else {
         m_position = newPosition;
     }
 
-    // Optional world clamp.
-    if (worldBounds) {
-        m_position.x = std::clamp(m_position.x, worldBounds->min.x + m_bounds.min.x,
-                                          worldBounds->max.x + m_bounds.max.x);
-        m_position.z = std::clamp(m_position.z, worldBounds->min.z + m_bounds.min.z,
-                                          worldBounds->max.z + m_bounds.max.z);
+    // Apply vertical movement with collision resolution.
+    if (hasSolids) {
+        glm::vec3 tryY = m_position + glm::vec3(0.0f, m_verticalVelocity * deltaTime, 0.0f);
+        AABB nextY{tryY + m_bounds.min, tryY + m_bounds.max};
+        bool collides = false;
+        const AABB* hit = nullptr;
+        for (const auto& s : *solids) {
+            if (nextY.intersects(s)) { collides = true; hit = &s; break; }
+        }
+        if (!collides) {
+            m_position = tryY;
+        } else {
+            // Collided vertically: snap to surface and reset velocity.
+            if (m_verticalVelocity < 0.0f) {
+                // Falling: sit on top of the block.
+                m_position.y = std::floor(hit->max.y - m_bounds.min.y) + 0.001f;
+            } else {
+                // Rising: hit head, push down.
+                m_position.y = std::ceil(hit->min.y - m_bounds.max.y) - 0.001f;
+            }
+            m_verticalVelocity = 0.0f;
+            m_onGround = true;
+        }
+    } else {
+        m_verticalVelocity = 0.0f;
+        m_onGround = false;
     }
 
     updateVectors();

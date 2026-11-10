@@ -37,6 +37,8 @@ set(PROJECT_SOURCES
     src/Noise.cpp
     src/TextureAtlas.cpp
     src/World.cpp
+    src/UI.cpp
+    src/WorldSave.cpp
 )
 
 set(PROJECT_HEADERS
@@ -44,10 +46,13 @@ set(PROJECT_HEADERS
     include/Camera.h
     include/Chunk.h
     include/Engine.h
+    include/GameState.h
     include/Noise.h
     include/Shader.h
     include/TextureAtlas.h
+    include/UI.h
     include/World.h
+    include/WorldSave.h
 )
 
 if(CRAFT_USE_LOCAL_DEPS)
