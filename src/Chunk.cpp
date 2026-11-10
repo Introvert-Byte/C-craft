@@ -1,5 +1,4 @@
 #include "Chunk.h"
-#include "TextureAtlas.h"
 
 #include <glad/glad.h>
 
@@ -28,22 +27,37 @@ constexpr std::array<glm::vec3, 6> faceNormals = {{
     glm::vec3(0, 0, -1),  // BACK
 }};
 
-// For each face, the four corner offsets (x, y, z) forming a unit quad.
-// Winding is counter-clockwise when viewed from the outside (along the face
-// normal), so faces are front-facing and not culled by glCullFace(GL_BACK).
+// Face corners in CCW order when viewed from outside the cube.
+// Face-local UVs are assigned as (0,0),(1,0),(1,1),(0,1) in this same order.
 constexpr std::array<std::array<glm::ivec3, 4>, 6> faceCorners = {{
-    // TOP:     y = +1 face, normal (0,1,0)
-    {{{0,1,0},{0,1,1},{1,1,1},{1,1,0}}},
-    // BOTTOM:  y = 0 face, normal (0,-1,0)
-    {{{0,0,0},{1,0,0},{1,0,1},{0,0,1}}},
-    // LEFT:    x = 0 face, normal (-1,0,0)
-    {{{0,0,0},{0,0,1},{0,1,1},{0,1,0}}},
-    // RIGHT:   x = +1 face, normal (1,0,0)
-    {{{1,0,1},{1,0,0},{1,1,0},{1,1,1}}},
-    // FRONT:   z = +1 face, normal (0,0,1)
-    {{{0,0,1},{1,0,1},{1,1,1},{0,1,1}}},
-    // BACK:    z = 0 face, normal (0,0,-1)
-    {{{1,0,0},{0,0,0},{0,1,0},{1,1,0}}},
+    // TOP: normal (0,1,0), viewed from above
+    {{glm::ivec3(0,1,0), glm::ivec3(1,1,0), glm::ivec3(1,1,1), glm::ivec3(0,1,1)}},
+
+    // BOTTOM: normal (0,-1,0), viewed from below
+    {{glm::ivec3(0,0,0), glm::ivec3(0,0,1), glm::ivec3(1,0,1), glm::ivec3(1,0,0)}},
+
+    // LEFT: normal (-1,0,0), viewed from left (-X)
+    {{glm::ivec3(0,0,0), glm::ivec3(0,1,0), glm::ivec3(0,1,1), glm::ivec3(0,0,1)}},
+
+    // RIGHT: normal (1,0,0), viewed from right (+X)
+    {{glm::ivec3(1,0,1), glm::ivec3(1,1,1), glm::ivec3(1,1,0), glm::ivec3(1,0,0)}},
+
+    // FRONT: normal (0,0,1), viewed from front (+Z)
+    {{glm::ivec3(0,0,1), glm::ivec3(1,0,1), glm::ivec3(1,1,1), glm::ivec3(0,1,1)}},
+
+    // BACK: normal (0,0,-1), viewed from back (-Z)
+    {{glm::ivec3(1,0,0), glm::ivec3(0,0,0), glm::ivec3(0,1,0), glm::ivec3(1,1,0)}},
+}};
+
+// Face-local UV coordinates matching the corner order above.
+// (0,0),(1,0),(1,1),(0,1) for each face.
+constexpr std::array<std::array<glm::vec2, 4>, 6> faceUVs = {{
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // TOP
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // BOTTOM
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // LEFT
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // RIGHT
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // FRONT
+    {{glm::vec2(0,0), glm::vec2(1,0), glm::vec2(1,1), glm::vec2(0,1)}},  // BACK
 }};
 } // namespace
 
@@ -78,8 +92,6 @@ bool Chunk::isSolid(int x, int y, int z) const {
 
 void Chunk::buildMesh(const TextureAtlas& atlas,
                       std::function<bool(int x, int y, int z)> solidOutside) {
-    // Resolve neighbour-solidity: prefer the chunk's own blocks, fall back to
-    // the caller-provided callback for out-of-chunk queries, else air.
     auto solid = [&](int x, int y, int z) -> bool {
         if (x >= 0 && x < WIDTH && y >= 0 && y < HEIGHT && z >= 0 && z < DEPTH)
             return isSolid(x, y, z);
@@ -90,7 +102,7 @@ void Chunk::buildMesh(const TextureAtlas& atlas,
     if (!m_meshDirty && m_vertexCount > 0) return;
 
     std::vector<float> vertices;
-    vertices.reserve(4096); // typical chunk face count upper bound hint
+    vertices.reserve(8192);
 
     for (int y = 0; y < HEIGHT; ++y) {
         for (int z = 0; z < DEPTH; ++z) {
@@ -100,39 +112,33 @@ void Chunk::buildMesh(const TextureAtlas& atlas,
                 const auto& props = blocks().get(id);
                 if (!props.solid) continue;
 
-                const glm::vec3 base(static_cast<float>(x),
-                                     static_cast<float>(y),
-                                     static_cast<float>(z));
+                glm::vec3 base(static_cast<float>(x),
+                               static_cast<float>(y),
+                               static_cast<float>(z));
+
+                // Get atlas UV info for this block's first face (all faces use same tile size)
+                glm::vec4 rect = atlas.tileRect(id, Face::TOP);
+                glm::vec2 atlasOrigin(rect.x, rect.y);
+                float tileU = rect.z;
+                float tileV = rect.w;
 
                 for (std::uint32_t f = 0; f < 6; ++f) {
                     // Face culling: skip faces shared with an opaque neighbour.
                     glm::ivec3 n = glm::ivec3(base) + faceDirs[f];
                     if (solid(n.x, n.y, n.z)) continue;
 
-                    // Transparent neighbours (e.g. leaves) do not cull the face.
                     glm::vec3 normal = faceNormals[f];
                     const auto& corners = faceCorners[f];
+                    const auto& uvs = faceUVs[f];
 
-                    // Texture UV for this face, taken from the atlas tile rect.
-                    glm::vec4 rect = atlas.tileRect(id, static_cast<Face>(f));
-                    glm::vec2 uvOrigin(rect.x, rect.y);
-                    float tw = rect.z;
-                    float th = rect.w;
+                    // All 6 faces of a block use the same tile (simple coloring).
+                    // For different textures per face, we'd look up tileRect per face.
+                    glm::vec2 faceAtlasOrigin = atlasOrigin;
 
-                    // Corner UV offsets in atlas space.
                     for (std::uint32_t c = 0; c < 4; ++c) {
                         glm::vec3 pos = base + glm::vec3(corners[c]);
-                        // Face-aligned UV: choose which axis pair to flatten.
-                        glm::vec2 uv;
-                        switch (static_cast<Face>(f)) {
-                            case Face::TOP:    uv = glm::vec2(corners[c].x, corners[c].z); break;
-                            case Face::BOTTOM: uv = glm::vec2(corners[c].x, corners[c].z); break;
-                            case Face::LEFT:   uv = glm::vec2(corners[c].z, corners[c].y); break;
-                            case Face::RIGHT:  uv = glm::vec2(corners[c].z, corners[c].y); break;
-                            case Face::FRONT:  uv = glm::vec2(corners[c].x, corners[c].y); break;
-                            case Face::BACK:   uv = glm::vec2(corners[c].x, corners[c].y); break;
-                        }
-                        uv = uvOrigin + uv * glm::vec2(tw, th);
+                        glm::vec2 faceUV = uvs[c];
+                        glm::vec2 uv = faceAtlasOrigin + faceUV * glm::vec2(tileU, tileV);
 
                         vertices.push_back(pos.x);
                         vertices.push_back(pos.y);
@@ -170,12 +176,12 @@ void Chunk::uploadMesh(const std::vector<float>& vertices) {
     }
 
     GLsizei stride = 8 * sizeof(float);
-    glEnableVertexAttribArray(0); // position
+    glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, stride, nullptr);
-    glEnableVertexAttribArray(1); // normal
+    glEnableVertexAttribArray(1);
     glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, stride,
                           reinterpret_cast<void*>(3 * sizeof(float)));
-    glEnableVertexAttribArray(2); // uv
+    glEnableVertexAttribArray(2);
     glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, stride,
                           reinterpret_cast<void*>(6 * sizeof(float)));
 

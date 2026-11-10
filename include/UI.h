@@ -7,8 +7,6 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
-// A simple immediate-mode text renderer using a procedural character atlas.
-// Renders text as quads textured from an atlas of ASCII characters.
 class FontRenderer {
 public:
     FontRenderer();
@@ -17,19 +15,11 @@ public:
     FontRenderer(const FontRenderer&) = delete;
     FontRenderer& operator=(const FontRenderer&) = delete;
 
-    // Initialize the font atlas and shader. Must be called with an active GL
-    // context before any drawing.
     bool init();
-
-    // Render a line of text at screen-space position (x, y) in pixels.
-    // `scale` multiplies the base character size.
+    void begin(int screenWidth, int screenHeight);
     void drawText(float x, float y, const std::string& text,
                   float scale = 1.0f,
                   const glm::vec3& color = glm::vec3(1.0f));
-
-    // Begin a batch of text draws (sets up projection + shader).
-    void begin(int screenWidth, int screenHeight);
-    // End the batch (flushes any pending geometry).
     void end();
 
 private:
@@ -41,21 +31,18 @@ private:
     GLint m_locColor = -1;
     GLint m_locTex = -1;
 
-    // Character cell size in atlas pixels.
     int m_charW = 8;
     int m_charH = 8;
     int m_atlasW = 0;
     int m_atlasH = 0;
 
-    // Build the procedural ASCII atlas (printable chars 32..126).
     void buildAtlas();
     GLuint compileProgram();
 };
 
-// A simple clickable button for the UI.
 struct UIButton {
     std::string label;
-    float x, y, w, h;      // screen space
+    float x, y, w, h;
     bool hovered = false;
     bool clicked = false;
 

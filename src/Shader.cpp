@@ -43,11 +43,9 @@ uniform vec3 uViewPos;
 uniform vec3 uBlockColor;
 
 void main() {
-    // Sample the texture atlas.
     vec4 texel = texture(uTextureAtlas, vTexCoord);
 
-    // Simple directional + ambient lighting with diffuse from the light.
-    vec3 ambient = 0.35f * uLightColor;
+    vec3 ambient = 0.4f * uLightColor;
     vec3 norm = normalize(vNormal);
     vec3 lightDir = normalize(uLightPos - vFragPos);
     float diff = max(dot(norm, lightDir), 0.0f);
@@ -69,10 +67,7 @@ std::string loadFile(const char* path) {
 } // namespace
 
 Shader::Shader() = default;
-
-Shader::~Shader() {
-    if (m_programID) glDeleteProgram(m_programID);
-}
+Shader::~Shader() { if (m_programID) glDeleteProgram(m_programID); }
 
 Shader::Shader(Shader&& other) noexcept
     : m_programID(other.m_programID), m_linked(other.m_linked),
@@ -97,7 +92,6 @@ GLuint Shader::compileShader(GLenum type, const char* source) {
     GLuint shader = glCreateShader(type);
     glShaderSource(shader, 1, &source, nullptr);
     glCompileShader(shader);
-
     GLint success = 0;
     glGetShaderiv(shader, GL_COMPILE_STATUS, &success);
     if (!success) {
@@ -151,15 +145,12 @@ bool Shader::loadFromFiles(const char* vertexPath, const char* fragmentPath) {
     std::string vsSrc = loadFile(vertexPath);
     std::string fsSrc = loadFile(fragmentPath);
     if (vsSrc.empty() || fsSrc.empty()) {
-        // Fall back to built-in defaults so the engine runs out of the box.
         return loadFromString(DEFAULT_VERTEX_SHADER, DEFAULT_FRAGMENT_SHADER);
     }
     return loadFromString(vsSrc.c_str(), fsSrc.c_str());
 }
 
-void Shader::use() const {
-    glUseProgram(m_programID);
-}
+void Shader::use() const { glUseProgram(m_programID); }
 
 GLint Shader::getUniformLocation(const std::string& name) {
     auto it = m_uniformCache.find(name);
@@ -172,21 +163,17 @@ GLint Shader::getUniformLocation(const std::string& name) {
 void Shader::setUniform1i(const std::string& name, int value) {
     glUniform1i(getUniformLocation(name), value);
 }
-
 void Shader::setUniform1f(const std::string& name, float value) {
     glUniform1f(getUniformLocation(name), value);
 }
-
 void Shader::setUniformMatrix4fv(const std::string& name,
                                  const glm::mat4& matrix) {
     glUniformMatrix4fv(getUniformLocation(name), 1, GL_FALSE,
                        glm::value_ptr(matrix));
 }
-
 void Shader::setUniform3f(const std::string& name, const glm::vec3& value) {
     glUniform3fv(getUniformLocation(name), 1, glm::value_ptr(value));
 }
-
 void Shader::setUniformVec3(const std::string& name, float x, float y,
                             float z) {
     glUniform3f(getUniformLocation(name), x, y, z);

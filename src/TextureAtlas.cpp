@@ -2,20 +2,12 @@
 
 #include <glad/glad.h>
 #include <cstring>
-#include <numeric>
+#include <cstdint>
+#include <vector>
 
 namespace voxel {
 
 namespace {
-// Simple XOR-shift PRNG for procedural texture generation.
-std::uint32_t rngState = 0xC0FFEEu;
-inline std::uint32_t xorshift32() {
-    rngState ^= rngState << 13;
-    rngState ^= rngState >> 17;
-    rngState ^= rngState << 5;
-    return rngState;
-}
-
 inline glm::vec4 blockBaseColor(BlockID id) {
     switch (id) {
         case BLOCK_GRASS: return glm::vec4(0.34f, 0.62f, 0.14f, 1.0f);
@@ -28,11 +20,24 @@ inline glm::vec4 blockBaseColor(BlockID id) {
     }
 }
 
-// Fill one tile of the atlas with a stylised face texture.
 void fillTile(std::vector<std::uint8_t>& px, std::uint32_t tileSize,
               std::uint32_t tileX, std::uint32_t tileY, BlockID id, Face face) {
     const auto base = blockBaseColor(id);
     const std::uint32_t stride = tileSize * 4;
+
+    // Face-dependent shading so sides look different from top.
+    glm::vec4 shade = glm::vec4(1.0f);
+    switch (face) {
+        case Face::TOP:    shade = glm::vec4(1.05f, 1.05f, 0.95f, 1.0f); break;
+        case Face::BOTTOM: shade = glm::vec4(0.70f, 0.70f, 0.70f, 1.0f); break;
+        case Face::LEFT:   shade = glm::vec4(0.80f, 0.80f, 0.80f, 1.0f); break;
+        case Face::RIGHT:  shade = glm::vec4(1.00f, 1.00f, 1.00f, 1.0f); break;
+        case Face::FRONT:  shade = glm::vec4(0.90f, 0.90f, 0.90f, 1.0f); break;
+        case Face::BACK:   shade = glm::vec4(0.85f, 0.85f, 0.85f, 1.0f); break;
+    }
+
+    // Simple noise grain.
+    std::uint32_t rng = 0x12345678u ^ (tileX * 7919u) ^ (tileY * 31337u);
 
     for (std::uint32_t y = 0; y < tileSize; ++y) {
         for (std::uint32_t x = 0; x < tileSize; ++x) {
@@ -40,24 +45,18 @@ void fillTile(std::vector<std::uint8_t>& px, std::uint32_t tileSize,
             const std::uint32_t oy = tileY * tileSize + y;
             const std::uint32_t i = oy * stride + ox * 4;
 
-            glm::vec4 color = base;
-            switch (face) {
-                case Face::TOP:    color *= glm::vec4(1.05f, 1.05f, 0.9f, 1.0f); break;
-                case Face::BOTTOM: color *= glm::vec4(0.75f, 0.75f, 0.75f, 1.0f); break;
-                case Face::LEFT:   color *= glm::vec4(0.85f, 0.85f, 0.85f, 1.0f); break;
-                case Face::RIGHT:  color *= glm::vec4(1.0f, 1.0f, 1.0f, 1.0f);   break;
-                case Face::FRONT:  color *= glm::vec4(0.95f, 0.95f, 0.95f, 1.0f); break;
-                case Face::BACK:   color *= glm::vec4(0.8f, 0.8f, 0.8f, 1.0f);   break;
-                default: break;
-            }
+            glm::vec4 color = base * shade;
 
-            std::uint32_t n = xorshift32() % 40;
-            float grain = (n - 20) / 255.0f;
+            // Deterministic grain.
+            rng ^= rng << 13;
+            rng ^= rng >> 17;
+            rng ^= rng << 5;
+            float grain = ((rng % 40) - 20) / 255.0f;
             color = glm::clamp(color + glm::vec4(grain, grain, grain, 0.0f), 0.0f, 1.0f);
 
+            // Grass side gets dirt at bottom rows.
             if (id == BLOCK_GRASS && face == Face::RIGHT && y > tileSize * 2 / 3) {
-                color = blockBaseColor(BLOCK_DIRT);
-                color *= glm::vec4(0.9f, 0.9f, 0.9f, 1.0f);
+                color = blockBaseColor(BLOCK_DIRT) * shade;
             }
 
             px[i + 0] = static_cast<std::uint8_t>(color.r * 255.0f);
@@ -76,9 +75,7 @@ void TextureAtlas::buildProcedural(std::uint32_t tileSize,
     m_tileSize = tileSize;
     m_tilesPerRow = tilesPerRow;
 
-    // Assign tile indices: 6 faces per block id.
-    // Note: use `int` for the loop variable since BlockID (uint8_t) would
-    // overflow at 256 and create an infinite loop.
+    // Assign tile indices: 6 faces per block id (all faces share one tile).
     std::uint32_t nextTile = 0;
     for (int id = 0; id < 256; ++id) {
         for (std::uint32_t f = 0; f < 6; ++f) {
@@ -112,10 +109,6 @@ void TextureAtlas::buildProcedural(std::uint32_t tileSize,
     glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA8, m_atlasWidth, m_atlasHeight, 0,
                  GL_RGBA, GL_UNSIGNED_BYTE, px.data());
     glBindTexture(GL_TEXTURE_2D, 0);
-}
-
-bool TextureAtlas::loadFromFile(const char* /*path*/, std::uint32_t /*tileSize*/) {
-    return false;
 }
 
 glm::vec2 TextureAtlas::tileUV(BlockID id, Face face) const {

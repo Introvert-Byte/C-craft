@@ -1,14 +1,10 @@
 #include "UI.h"
 
 #include <glad/glad.h>
-
 #include <algorithm>
 #include <cmath>
-#include <cstdint>
 #include <cstring>
-#include <fstream>
 #include <iostream>
-#include <sstream>
 
 #include <glm/gtc/type_ptr.hpp>
 
@@ -53,7 +49,7 @@ GLuint compileShader(GLenum type, const char* src) {
     if (!ok) {
         char log[1024];
         glGetShaderInfoLog(s, sizeof(log), nullptr, log);
-        std::cerr << "Shader error:\n" << log << "\n";
+        std::cerr << "Font shader error:\n" << log << "\n";
         glDeleteShader(s);
         return 0;
     }
@@ -71,8 +67,7 @@ FontRenderer::~FontRenderer() {
 }
 
 void FontRenderer::buildAtlas() {
-    // 95 printable ASCII chars (32..126), laid out in a row.
-    const int cols = 95;
+    const int cols = 96;
     m_charW = 8;
     m_charH = 8;
     m_atlasW = cols * m_charW;
@@ -80,105 +75,41 @@ void FontRenderer::buildAtlas() {
 
     std::vector<std::uint8_t> px(m_atlasW * m_atlasH * 4, 0);
 
-    // Simple 5x7 bitmap font for printable ASCII.
-    // Each char is 5 pixels wide, 7 tall, centered in an 8x8 cell.
     auto setPixel = [&](int cx, int cy, int px_, int py_) {
         int ox = cx * m_charW + px_;
         int oy = cy * m_charH + py_;
         if (ox >= 0 && ox < m_atlasW && oy >= 0 && oy < m_atlasH) {
             int i = (oy * m_atlasW + ox) * 4;
-            px[i + 0] = 255;
-            px[i + 1] = 255;
-            px[i + 2] = 255;
             px[i + 3] = 255;
+            px[i + 0] = 200;
+            px[i + 1] = 220;
+            px[i + 2] = 255;
         }
     };
 
-    // 5x7 font data for printable chars (space=32 to ~ =126).
-    // We'll generate simple shapes programmatically instead of a huge table.
-    // For each char code, draw a recognizable glyph.
-    for (int code = 32; code <= 126; ++code) {
+    // Draw a simple character glyph for each printable ASCII char.
+    for (int code = 32; code <= 127; ++code) {
         int cell = code - 32;
         int cx = cell % cols;
         int cy = cell / cols;
-
-        // Center the glyph in the 8x8 cell.
         int gx = cx * m_charW + 1;
         int gy = cy * m_charH + 1;
 
-        // Simple glyph rendering: draw patterns based on char code.
-        // This produces distinguishable characters for UI text.
-        bool drawn = false;
-
-        // Digits 0-9
-        if (code >= '0' && code <= '9') {
-            int d = code - '0';
-            // Simple 5x7 digit patterns
-            static const int digitPat[10][7] = {
-                {0b01110, 0b10001, 0b10011, 0b10101, 0b11001, 0b10001, 0b01110}, // 0
-                {0b00100, 0b01100, 0b00100, 0b00100, 0b00100, 0b00100, 0b01110}, // 1
-                {0b01110, 0b10001, 0b00001, 0b00110, 0b01000, 0b10000, 0b11111}, // 2
-                {0b01110, 0b10001, 0b00001, 0b00110, 0b00001, 0b10001, 0b01110}, // 3
-                {0b00011, 0b00101, 0b01001, 0b10001, 0b11111, 0b00001, 0b00001}, // 4
-                {0b11111, 0b10000, 0b11110, 0b00001, 0b00001, 0b10001, 0b01110}, // 5
-                {0b01110, 0b10000, 0b11110, 0b10001, 0b10001, 0b10001, 0b01110}, // 6
-                {0b11111, 0b00001, 0b00010, 0b00100, 0b01000, 0b01000, 0b01000}, // 7
-                {0b01110, 0b10001, 0b01110, 0b10001, 0b10001, 0b10001, 0b01110}, // 8
-                {0b01110, 0b10001, 0b10001, 0b01111, 0b00001, 0b10001, 0b01110}, // 9
-            };
-            for (int row = 0; row < 7; ++row) {
-                int bits = digitPat[d][row];
-                for (int col = 0; col < 5; ++col) {
-                    if (bits & (1 << (4 - col)))
-                        setPixel(cx, cy, gx + col - cx * m_charW, gy + row - cy * m_charH);
-                }
+        // Render character using simple dot-matrix patterns.
+        // Each char gets a unique pattern so they're distinguishable.
+        int seed = code * 31 + 7;
+        for (int row = 0; row < 7; ++row) {
+            int rowSeed = seed + row * 17;
+            for (int col = 0; col < 5; ++col) {
+                rowSeed = rowSeed * 1103515245 + 12345;
+                bool on = ((rowSeed >> 16) & 1) == 1 ||
+                          (row == 0 && col > 0 && col < 4) ||
+                          (row == 6 && col > 0 && col < 4) ||
+                          (col == 0 && row > 0 && row < 6) ||
+                          (col == 4 && row > 0 && row < 6);
+                if (on)
+                    setPixel(cx, cy, gx + col, gy + row);
             }
-            drawn = true;
-        }
-        // Uppercase A-Z
-        if (code >= 'A' && code <= 'Z' && !drawn) {
-            int l = code - 'A';
-            // Draw a simple block letter based on index
-            for (int row = 0; row < 7; ++row) {
-                for (int col = 0; col < 5; ++col) {
-                    bool on = false;
-                    // Distinctive pattern per letter
-                    int pat = (l * 13 + row * 3 + col) % 3;
-                    if (pat == 0 || (row == 0 && col > 0 && col < 4) ||
-                        (row == 3 && col > 0 && col < 4) ||
-                        (col == 0 && row > 0 && row < 6) ||
-                        (col == 4 && row > 0 && row < 6)) {
-                        on = (pat == 0);
-                    }
-                    if (on)
-                        setPixel(cx, cy, gx + col - cx * m_charW, gy + row - cy * m_charH);
-                }
-            }
-            drawn = true;
-        }
-        // Lowercase a-z (slightly different pattern)
-        if (code >= 'a' && code <= 'z' && !drawn) {
-            int l = code - 'a';
-            for (int row = 0; row < 7; ++row) {
-                for (int col = 0; col < 5; ++col) {
-                    bool on = false;
-                    int pat = (l * 7 + row * 2 + col) % 3;
-                    if (pat == 0 || (row == 1 && col > 0 && col < 4) ||
-                        (row == 4 && col > 0 && col < 4)) {
-                        on = (pat == 0);
-                    }
-                    if (on)
-                        setPixel(cx, cy, gx + col - cx * m_charW, gy + row - cy * m_charH);
-                }
-            }
-            drawn = true;
-        }
-        // Punctuation and symbols
-        if (!drawn) {
-            // Just draw a small block for unknown chars
-            for (int row = 2; row < 5; ++row)
-                for (int col = 2; col < 4; ++col)
-                    setPixel(cx, cy, gx + col - cx * m_charW, gy + row - cy * m_charH);
         }
     }
 
@@ -206,7 +137,7 @@ GLuint FontRenderer::compileProgram() {
     if (!ok) {
         char log[1024];
         glGetProgramInfoLog(prog, sizeof(log), nullptr, log);
-        std::cerr << "Font program link error:\n" << log << "\n";
+        std::cerr << "Font link error:\n" << log << "\n";
         glDeleteProgram(prog);
         return 0;
     }
@@ -228,7 +159,7 @@ bool FontRenderer::init() {
     glGenBuffers(1, &m_vbo);
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    glBufferData(GL_ARRAY_BUFFER, 4096 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
+    glBufferData(GL_ARRAY_BUFFER, 8192 * sizeof(float), nullptr, GL_DYNAMIC_DRAW);
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 4 * sizeof(float), nullptr);
     glEnableVertexAttribArray(1);
@@ -246,13 +177,11 @@ void FontRenderer::begin(int screenWidth, int screenHeight) {
     glBindVertexArray(m_vao);
     glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
 
-    // Orthographic projection: Y increases downward (screen space).
     glm::mat4 proj = glm::ortho(0.0f, (float)screenWidth,
                                 (float)screenHeight, 0.0f, -1.0f, 1.0f);
     glUniformMatrix4fv(m_locProj, 1, GL_FALSE, glm::value_ptr(proj));
     glUniform1i(m_locTex, 0);
 
-    // Enable blending for text alpha.
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
     glDisable(GL_DEPTH_TEST);
@@ -272,7 +201,6 @@ void FontRenderer::drawText(float x, float y, const std::string& text,
 
     glUniform3f(m_locColor, color.r, color.g, color.b);
 
-    // Collect vertices for this string.
     std::vector<float> verts;
     verts.reserve(text.size() * 4 * 4);
 
@@ -281,14 +209,16 @@ void FontRenderer::drawText(float x, float y, const std::string& text,
     float cw = m_charW * scale;
     float ch = m_charH * scale;
 
+    int cols = m_atlasW / m_charW;
+
     for (char ch_ : text) {
         int code = (unsigned char)ch_;
-        if (code < 32 || code > 126) {
+        if (code < 32 || code > 127) {
             cx += cw * 0.6f;
             continue;
         }
         int cell = code - 32;
-        int col = cell % ((m_atlasW + m_charW - 1) / m_charW);
+        int col = cell % cols;
         float tx = (float)(col * m_charW) / (float)m_atlasW;
         float tw = (float)m_charW / (float)m_atlasW;
 
@@ -297,7 +227,6 @@ void FontRenderer::drawText(float x, float y, const std::string& text,
         float y0 = cy;
         float y1 = cy + ch;
 
-        // Two triangles per quad (CCW).
         verts.push_back(x0); verts.push_back(y0); verts.push_back(tx);             verts.push_back(0.0f);
         verts.push_back(x1); verts.push_back(y0); verts.push_back(tx + tw);        verts.push_back(0.0f);
         verts.push_back(x1); verts.push_back(y1); verts.push_back(tx + tw);        verts.push_back(1.0f);
@@ -306,7 +235,7 @@ void FontRenderer::drawText(float x, float y, const std::string& text,
         verts.push_back(x1); verts.push_back(y1); verts.push_back(tx + tw);        verts.push_back(1.0f);
         verts.push_back(x0); verts.push_back(y1); verts.push_back(tx);             verts.push_back(1.0f);
 
-        cx += cw * 0.6f; // character advance
+        cx += cw * 0.6f;
     }
 
     if (verts.empty()) return;

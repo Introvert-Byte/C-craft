@@ -1,6 +1,7 @@
 #include "WorldSave.h"
 
 #include <algorithm>
+#include <cstdint>
 #include <cstring>
 #include <fstream>
 #include <iostream>
@@ -19,7 +20,6 @@ std::filesystem::path WorldSave::worldDir(const std::string& name) const {
 
 std::filesystem::path WorldSave::chunkFile(const std::string& name, int cx,
                                            int cz) const {
-    // Encode chunk coordinates into a filesystem-safe filename.
     return worldDir(name) / ("c_" + std::to_string(cx) + "_" +
                              std::to_string(cz) + ".dat");
 }
@@ -28,8 +28,7 @@ std::vector<WorldSaveInfo> WorldSave::listWorlds() const {
     std::vector<WorldSaveInfo> result;
     if (!std::filesystem::exists(m_savesDir)) return result;
 
-    for (const auto& entry :
-         std::filesystem::directory_iterator(m_savesDir)) {
+    for (const auto& entry : std::filesystem::directory_iterator(m_savesDir)) {
         if (!entry.is_directory()) continue;
         WorldSaveInfo info;
         info.name = entry.path().filename().string();
@@ -45,7 +44,6 @@ std::vector<WorldSaveInfo> WorldSave::listWorlds() const {
         }
         result.push_back(info);
     }
-    // Sort by name.
     std::sort(result.begin(), result.end(),
               [](const WorldSaveInfo& a, const WorldSaveInfo& b) {
                   return a.name < b.name;
@@ -68,7 +66,6 @@ bool WorldSave::writeChunk(const std::filesystem::path& path,
     std::ofstream file(path, std::ios::binary);
     if (!file.is_open()) return false;
 
-    // Header: magic + version + chunk coords.
     constexpr char MAGIC[4] = {'C', 'C', 'K', '0'};
     file.write(MAGIC, 4);
     std::int32_t cx = chunk.chunkX();
@@ -76,15 +73,12 @@ bool WorldSave::writeChunk(const std::filesystem::path& path,
     file.write(reinterpret_cast<const char*>(&cx), sizeof(cx));
     file.write(reinterpret_cast<const char*>(&cz), sizeof(cz));
 
-    // Block data: SIZE bytes.
     std::uint8_t buf[Chunk::SIZE];
     for (int i = 0; i < Chunk::SIZE; ++i) {
-        // indexOf: y * (WIDTH * DEPTH) + z * WIDTH + x
-        // We store in the same flat order as m_blocks.
-        buf[i] = static_cast<std::uint8_t>(chunk.getBlock(
-            i % Chunk::WIDTH,
-            (i / Chunk::WIDTH) % Chunk::HEIGHT,
-            i / (Chunk::WIDTH * Chunk::HEIGHT)));
+        int x = i % Chunk::WIDTH;
+        int y = (i / Chunk::WIDTH) % Chunk::HEIGHT;
+        int z = i / (Chunk::WIDTH * Chunk::HEIGHT);
+        buf[i] = static_cast<std::uint8_t>(chunk.getBlock(x, y, z));
     }
     file.write(reinterpret_cast<const char*>(buf), Chunk::SIZE);
     return file.good();
@@ -118,8 +112,6 @@ bool WorldSave::readChunk(const std::filesystem::path& path, Chunk& chunk) {
 
 bool WorldSave::saveWorld(const std::string& name, const World& world) {
     if (!createWorld(name)) return false;
-
-    // Save all currently loaded chunks.
     bool ok = true;
     world.forEachChunk([&](int cx, int cz, Chunk* chunk) {
         if (!writeChunk(chunkFile(name, cx, cz), *chunk)) ok = false;
@@ -134,7 +126,6 @@ bool WorldSave::loadWorld(const std::string& name, World& world) {
     for (const auto& entry : std::filesystem::directory_iterator(dir)) {
         if (entry.path().extension() != ".dat") continue;
         std::string fname = entry.path().filename().string();
-        // Parse c_X_Y.dat
         if (fname.size() < 3 || fname[0] != 'c' || fname[1] != '_')
             continue;
         size_t first = fname.find('_', 2);
@@ -145,7 +136,6 @@ bool WorldSave::loadWorld(const std::string& name, World& world) {
         int cz = std::stoi(fname.substr(second + 1,
                                          fname.size() - second -
                                              std::string(".dat").size()));
-        // Generate chunk then overwrite with saved data.
         world.generateChunkAsync(cx, cz);
         Chunk* c = world.getChunk(cx, cz);
         if (!c) continue;

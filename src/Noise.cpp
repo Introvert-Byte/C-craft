@@ -1,7 +1,6 @@
 #include "Noise.h"
 
 #include <algorithm>
-#include <cmath>
 
 namespace voxel {
 
@@ -9,15 +8,13 @@ PerlinNoise::PerlinNoise(std::int32_t seed) {
     std::array<std::int32_t, 256> p{};
     for (std::int32_t i = 0; i < 256; ++i) p[i] = i;
 
-    // Deterministic shuffle seeded by `seed`.
-    std::int32_t s = static_cast<std::int32_t>(seed);
+    std::int32_t s = seed;
     for (std::int32_t i = 255; i > 0; --i) {
         s = s * 1103515245 + 12345;
         std::int32_t j = (s >> 16) % (i + 1);
         std::swap(p[i], p[j]);
     }
 
-    // Duplicate to avoid modulo in the lookup.
     for (std::int32_t i = 0; i < 512; ++i) m_p[i] = p[i % 256];
 }
 
@@ -33,8 +30,7 @@ double PerlinNoise::grad(std::int32_t hash, double x, double y, double z) {
     std::int32_t h = hash & 15;
     double u = h < 8 ? x : y;
     double v = h < 4 ? y : (h == 12 || h == 14 ? x : z);
-    double r = ((h & 1) == 0 ? -u : u) + ((h & 2) == 0 ? -v : v);
-    return r;
+    return ((h & 1) == 0 ? -u : u) + ((h & 2) == 0 ? -v : v);
 }
 
 double PerlinNoise::noise2D(double x, double y) const {

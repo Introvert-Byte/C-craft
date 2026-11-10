@@ -1,10 +1,8 @@
 #include "Engine.h"
 
 #include <glad/glad.h>
-
 #include <algorithm>
-#include <chrono>
-#include <cstdarg>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -12,21 +10,6 @@
 #include <iostream>
 
 namespace voxel {
-
-static FILE* g_diagFile = nullptr;
-
-static void diag(const char* fmt, ...) {
-    if (!g_diagFile) {
-        g_diagFile = std::fopen("/tmp/craft_diag.txt", "w");
-    }
-    if (g_diagFile) {
-        va_list args;
-        va_start(args, fmt);
-        std::vfprintf(g_diagFile, fmt, args);
-        va_end(args);
-        std::fflush(g_diagFile);
-    }
-}
 
 static void glCheckError(const char* label) {
     GLenum err;
@@ -49,13 +32,13 @@ void Engine::setState(GameState state) {
 void Engine::setCreative(bool creative) {
     m_creativeMode = creative;
     if (creative) {
-        m_camera.moveSpeed = 10.0f;
+        m_camera.moveSpeed = 15.0f;
         m_camera.sprintMultiplier = 1.0f;
         m_camera.gravity = 0.0f;
     } else {
-        m_camera.moveSpeed = 4.5f;
-        m_camera.sprintMultiplier = 1.8f;
-        m_camera.gravity = 22.0f;
+        m_camera.moveSpeed = 5.0f;
+        m_camera.sprintMultiplier = 2.0f;
+        m_camera.gravity = 28.0f;
     }
 }
 
@@ -88,7 +71,6 @@ bool Engine::init(int width, int height, const char* title) {
     }
 
     std::cout << "OpenGL " << glGetString(GL_VERSION) << "\n";
-    diag("[diag] init: OpenGL loaded\n");
 
     glfwSetFramebufferSizeCallback(m_window, &Engine::framebufferSizeCallback);
     glfwSetCursorPosCallback(m_window, &Engine::cursorPosCallback);
@@ -120,11 +102,10 @@ bool Engine::init(int width, int height, const char* title) {
 
     m_camera.setBounds({glm::vec3(-0.3f, 0.0f, -0.3f),
                         glm::vec3(0.3f, 1.8f, 0.3f)});
-    m_camera.setPosition(glm::vec3(0.0f, 90.0f, 0.0f));
-    m_camera.setPitch(-25.0f);
+    m_camera.setPosition(glm::vec3(0.0f, 80.0f, 0.0f));
+    m_camera.setPitch(-20.0f);
 
     m_lastTime = glfwGetTime();
-    diag("[diag] init complete\n");
 
     return true;
 }
@@ -164,7 +145,8 @@ void Engine::mouseButtonCallback(GLFWwindow* window, int button, int action,
 
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         if (!engine->m_cursorCaptured &&
-            engine->m_state == GameState::PLAYING) {
+            (engine->m_state == GameState::PLAYING ||
+             engine->m_state == GameState::CREATIVE)) {
             glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
             engine->m_cursorCaptured = true;
         }
@@ -178,8 +160,8 @@ void Engine::scrollCallback(GLFWwindow* window, double /*xoffset*/,
     auto* engine = static_cast<Engine*>(glfwGetWindowUserPointer(window));
     if (!engine) return;
     engine->m_camera.moveSpeed = std::clamp(
-        engine->m_camera.moveSpeed + static_cast<float>(yoffset) * 0.5f, 1.0f,
-        30.0f);
+        engine->m_camera.moveSpeed + static_cast<float>(yoffset) * 0.5f,
+        1.0f, 40.0f);
 }
 
 void Engine::keyCallback(GLFWwindow* window, int key, int scancode, int action,
@@ -207,19 +189,19 @@ void Engine::keyCallback(GLFWwindow* window, int key, int scancode, int action,
     }
 
     if (key == GLFW_KEY_F3 && action == GLFW_PRESS) {
+        engine->m_debugOverlay = !engine->m_debugOverlay;
     }
 }
 
 int Engine::run() {
-    diag("[diag] run() started\n");
-    auto lastFpsTime = glfwGetTime();
+    double lastFpsTime = glfwGetTime();
     int frames = 0;
 
     while (!glfwWindowShouldClose(m_window)) {
         double currentTime = glfwGetTime();
         float deltaTime = static_cast<float>(currentTime - m_lastTime);
         m_lastTime = currentTime;
-        if (deltaTime > 0.25f) deltaTime = 0.25f;
+        if (deltaTime > 0.1f) deltaTime = 0.1f;
 
         switch (m_state) {
             case GameState::MAIN_MENU:
@@ -253,27 +235,16 @@ int Engine::run() {
                 break;
         }
 
+        if (m_debugOverlay &&
+            (m_state == GameState::PLAYING || m_state == GameState::CREATIVE)) {
+            renderDebugOverlay();
+        }
+
         glfwSwapBuffers(m_window);
         glfwPollEvents();
 
         ++frames;
         if (currentTime - lastFpsTime >= 1.0) {
-            glm::vec3 p = m_camera.position();
-            int chunks = 0;
-            int verts = 0;
-            int px = static_cast<int>(std::floor(p.x / Chunk::WIDTH));
-            int pz = static_cast<int>(std::floor(p.z / Chunk::DEPTH));
-            for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; ++z) {
-                for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; ++x) {
-                    Chunk* c = m_world.getChunk(px + x, pz + z);
-                    if (c && c->hasMesh()) {
-                        ++chunks;
-                        verts += static_cast<int>(c->vertexCount());
-                    }
-                }
-            }
-            diag("[diag] fps=%d state=%d chunks=%d verts=%d pos=(%.1f,%.1f,%.1f)\n",
-                 frames, (int)m_state, chunks, verts, p.x, p.y, p.z);
             frames = 0;
             lastFpsTime = currentTime;
         }
@@ -289,19 +260,9 @@ void Engine::shutdown() {
         m_window = nullptr;
     }
     glfwTerminate();
-    if (g_diagFile) {
-        std::fclose(g_diagFile);
-        g_diagFile = nullptr;
-    }
 }
 
-void Engine::updateMainMenu(float deltaTime) {
-    // Auto-start into the default world after 3 seconds.
-    m_menuAutoStartTimer += deltaTime;
-    if (m_menuAutoStartTimer > 3.0f) {
-        selectWorld("Default");
-    }
-}
+void Engine::updateMainMenu(float /*deltaTime*/) {}
 
 void Engine::renderMainMenu() {
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -309,37 +270,38 @@ void Engine::renderMainMenu() {
 
     m_font.begin(m_width, m_height);
 
-    m_font.drawText(m_width * 0.5f - 120.0f, m_height * 0.25f,
+    m_font.drawText(m_width * 0.5f - 100.0f, m_height * 0.25f,
                     "C+CRAFT", 2.5f, glm::vec3(0.4f, 0.8f, 1.0f));
-    m_font.drawText(m_width * 0.5f - 150.0f, m_height * 0.25f + 40.0f,
+    m_font.drawText(m_width * 0.5f - 140.0f, m_height * 0.25f + 42.0f,
                     "Voxel Engine Foundation (C++20)", 1.0f,
                     glm::vec3(0.8f, 0.8f, 0.8f));
 
-    float bw = 220.0f, bh = 40.0f;
+    float bw = 240.0f, bh = 44.0f;
     float bx = m_width * 0.5f - bw * 0.5f;
-    float by = m_height * 0.45f;
+    float by = m_height * 0.42f;
 
     m_menuButtons.clear();
     m_menuButtons.emplace_back("Singleplayer", bx, by, bw, bh);
-    m_menuButtons.emplace_back("Creative Mode", bx, by + bh + 12.0f, bw, bh);
-    m_menuButtons.emplace_back("Worlds", bx, by + 2 * (bh + 12.0f), bw, bh);
-    m_menuButtons.emplace_back("Options", bx, by + 3 * (bh + 12.0f), bw, bh);
-    m_menuButtons.emplace_back("Quit", bx, by + 4 * (bh + 12.0f), bw, bh);
+    m_menuButtons.emplace_back("Creative Mode", bx, by + bh + 14.0f, bw, bh);
+    m_menuButtons.emplace_back("Worlds", bx, by + 2 * (bh + 14.0f), bw, bh);
+    m_menuButtons.emplace_back("Quit", bx, by + 3 * (bh + 14.0f), bw, bh);
 
     double clickTime = glfwGetTime();
     bool justClicked = (clickTime - m_lastClickTime < 0.15f);
 
-    for (size_t i = 0; i < m_menuButtons.size(); ++i) {
-        auto& b = m_menuButtons[i];
-        if (!m_cursorCaptured) {
-            double mx, my;
-            glfwGetCursorPos(m_window, &mx, &my);
-            float uiY = (float)(m_height - my);
+    if (!m_cursorCaptured) {
+        double mx, my;
+        glfwGetCursorPos(m_window, &mx, &my);
+        float uiY = (float)(m_height - my);
+        for (auto& b : m_menuButtons) {
             b.hovered = b.contains((float)mx, uiY);
         }
-        glm::vec3 col = b.hovered ? glm::vec3(0.6f, 0.9f, 1.0f)
+    }
+
+    for (auto& b : m_menuButtons) {
+        glm::vec3 col = b.hovered ? glm::vec3(0.5f, 0.8f, 1.0f)
                                   : glm::vec3(0.9f, 0.9f, 0.9f);
-        m_font.drawText(b.x + 10.0f, b.y + 8.0f, b.label, 1.2f, col);
+        m_font.drawText(b.x + 14.0f, b.y + 10.0f, b.label, 1.3f, col);
 
         if (b.hovered && justClicked) {
             b.clicked = true;
@@ -355,7 +317,6 @@ void Engine::renderMainMenu() {
         } else if (m_menuButtons[2].clicked) {
             setState(GameState::WORLD_MENU);
         } else if (m_menuButtons[3].clicked) {
-        } else if (m_menuButtons[4].clicked) {
             glfwSetWindowShouldClose(m_window, GLFW_TRUE);
         }
     }
@@ -372,7 +333,7 @@ void Engine::renderWorldMenu() {
 
     m_font.begin(m_width, m_height);
 
-    m_font.drawText(m_width * 0.5f - 100.0f, m_height * 0.15f,
+    m_font.drawText(m_width * 0.5f - 90.0f, m_height * 0.15f,
                     "SELECT WORLD", 1.8f, glm::vec3(0.4f, 0.8f, 1.0f));
 
     auto worlds = m_save.listWorlds();
@@ -380,17 +341,17 @@ void Engine::renderWorldMenu() {
     m_worldButtons.clear();
 
     for (const auto& info : worlds) {
-        float bw = 300.0f, bh = 34.0f;
+        float bw = 320.0f, bh = 36.0f;
         float bx = m_width * 0.5f - bw * 0.5f;
         m_worldButtons.emplace_back(info.name, bx, wy, bw, bh);
         wy += bh + 10.0f;
     }
 
     float btnY = wy + 20.0f;
-    m_worldButtons.emplace_back("Create New", m_width * 0.5f - 160.0f, btnY,
-                                140.0f, 34.0f);
+    m_worldButtons.emplace_back("Create New", m_width * 0.5f - 150.0f, btnY,
+                                130.0f, 36.0f);
     m_worldButtons.emplace_back("Back", m_width * 0.5f + 20.0f, btnY, 100.0f,
-                                34.0f);
+                                36.0f);
 
     double clickTime = glfwGetTime();
     bool justClicked = (clickTime - m_lastClickTime < 0.15f);
@@ -405,9 +366,9 @@ void Engine::renderWorldMenu() {
     }
 
     for (auto& b : m_worldButtons) {
-        glm::vec3 col = b.hovered ? glm::vec3(0.6f, 0.9f, 1.0f)
+        glm::vec3 col = b.hovered ? glm::vec3(0.5f, 0.8f, 1.0f)
                                   : glm::vec3(0.9f, 0.9f, 0.9f);
-        m_font.drawText(b.x + 10.0f, b.y + 8.0f, b.label, 1.1f, col);
+        m_font.drawText(b.x + 14.0f, b.y + 10.0f, b.label, 1.2f, col);
 
         if (b.hovered && justClicked) {
             b.clicked = true;
@@ -415,8 +376,8 @@ void Engine::renderWorldMenu() {
     }
 
     if (m_newWorldActive) {
-        m_font.drawText(m_width * 0.5f - 120.0f, btnY + 50.0f,
-                        "Type world name: " + m_newWorldName + "_", 1.2f,
+        m_font.drawText(m_width * 0.5f - 110.0f, btnY + 50.0f,
+                        "Name: " + m_newWorldName + "_", 1.2f,
                         glm::vec3(1.0f, 1.0f, 0.0f));
     }
 
@@ -442,8 +403,8 @@ void Engine::renderWorldMenu() {
 
 void Engine::selectWorld(const std::string& name) {
     m_save.loadWorld(name, m_world);
-    m_camera.setPosition(glm::vec3(0.0f, 90.0f, 0.0f));
-    m_camera.setPitch(-25.0f);
+    m_camera.setPosition(glm::vec3(0.0f, 80.0f, 0.0f));
+    m_camera.setPitch(-20.0f);
     m_cursorCaptured = false;
     glfwSetInputMode(m_window, GLFW_CURSOR, GLFW_CURSOR_NORMAL);
     loadChunksAroundPlayer();
@@ -513,14 +474,16 @@ void Engine::renderPlaying() {
     m_font.begin(m_width, m_height);
     glm::vec3 pos = m_camera.position();
     char buf[128];
-    std::snprintf(buf, sizeof(buf), "XYZ: %.1f, %.1f, %.1f", pos.x, pos.y,
-                  pos.z);
+    std::snprintf(buf, sizeof(buf), "XYZ: %.1f, %.1f, %.1f", pos.x, pos.y, pos.z);
     m_font.drawText(10.0f, 10.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
     std::snprintf(buf, sizeof(buf), "%s",
                   m_creativeMode ? "CREATIVE MODE" : "SURVIVAL MODE");
     m_font.drawText(10.0f, 30.0f, buf, 1.0f,
                     m_creativeMode ? glm::vec3(0.0f, 1.0f, 0.0f)
                                    : glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.drawText(10.0f, m_height - 20.0f,
+                    "Press F3 for debug  |  ESC for menu", 0.8f,
+                    glm::vec3(0.7f, 0.7f, 0.7f));
     m_font.end();
 }
 
@@ -528,8 +491,40 @@ void Engine::renderPaused() {
     renderPlaying();
 
     m_font.begin(m_width, m_height);
-    m_font.drawText(m_width * 0.5f - 80.0f, m_height * 0.45f, "PAUSED", 2.0f,
+    m_font.drawText(m_width * 0.5f - 60.0f, m_height * 0.45f, "PAUSED", 2.0f,
                     glm::vec3(1.0f, 1.0f, 1.0f));
+    m_font.end();
+}
+
+void Engine::renderDebugOverlay() {
+    m_font.begin(m_width, m_height);
+
+    glm::vec3 pos = m_camera.position();
+    char buf[128];
+
+    int chunks = 0, verts = 0;
+    int px = static_cast<int>(std::floor(pos.x / Chunk::WIDTH));
+    int pz = static_cast<int>(std::floor(pos.z / Chunk::DEPTH));
+    for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE; ++z) {
+        for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE; ++x) {
+            Chunk* c = m_world.getChunk(px + x, pz + z);
+            if (c && c->hasMesh()) {
+                ++chunks;
+                verts += static_cast<int>(c->vertexCount());
+            }
+        }
+    }
+
+    std::snprintf(buf, sizeof(buf), "F3 Debug:");
+    m_font.drawText(10.0f, 60.0f, buf, 1.0f, glm::vec3(0.0f, 1.0f, 0.0f));
+    std::snprintf(buf, sizeof(buf), "  Pos: %.2f, %.2f, %.2f", pos.x, pos.y, pos.z);
+    m_font.drawText(10.0f, 80.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    std::snprintf(buf, sizeof(buf), "  Chunks: %d  Vertices: %d", chunks, verts);
+    m_font.drawText(10.0f, 100.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+    std::snprintf(buf, sizeof(buf), "  Mode: %s",
+                  m_creativeMode ? "CREATIVE" : "SURVIVAL");
+    m_font.drawText(10.0f, 120.0f, buf, 1.0f, glm::vec3(1.0f, 1.0f, 1.0f));
+
     m_font.end();
 }
 
@@ -546,21 +541,34 @@ void Engine::loadChunksAroundPlayer() {
 }
 
 void Engine::updateChunks() {
-    const int limit = 6;
-    int built = 0;
+    int generated = 0;
+    int meshed = 0;
     glm::vec3 p = m_camera.position();
     int px = static_cast<int>(std::floor(p.x / Chunk::WIDTH));
     int pz = static_cast<int>(std::floor(p.z / Chunk::DEPTH));
 
-    for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE && built < limit;
+    for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE && generated < MAX_GEN_PER_FRAME;
          ++z) {
-        for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE && built < limit;
+        for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE && generated < MAX_GEN_PER_FRAME;
+             ++x) {
+            int cx = px + x;
+            int cz = pz + z;
+            if (!m_world.getChunk(cx, cz)) {
+                m_world.generateChunkAsync(cx, cz);
+                ++generated;
+            }
+        }
+    }
+
+    for (int z = -RENDER_DISTANCE; z <= RENDER_DISTANCE && meshed < MAX_MESH_PER_FRAME;
+         ++z) {
+        for (int x = -RENDER_DISTANCE; x <= RENDER_DISTANCE && meshed < MAX_MESH_PER_FRAME;
              ++x) {
             int cx = px + x;
             int cz = pz + z;
             if (m_world.getChunk(cx, cz) && m_world.needsMesh(cx, cz)) {
                 m_world.buildChunkMesh(m_atlas, cx, cz);
-                ++built;
+                ++meshed;
             }
         }
     }
@@ -590,25 +598,26 @@ void Engine::handleBlockInteraction() {
         }
     }
 
+    double now = glfwGetTime();
+
     if (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_LEFT) == GLFW_PRESS &&
-        found && glfwGetTime() - m_lastClickTime > 0.15) {
+        found && now - m_lastClickTime > 0.15) {
         m_world.setBlock((int)hitBlock.x, (int)hitBlock.y, (int)hitBlock.z,
                          BLOCK_AIR);
         int cx = (int)hitBlock.x / Chunk::WIDTH;
         int cz = (int)hitBlock.z / Chunk::DEPTH;
         m_world.markMeshDirty(cx, cz);
-        m_lastClickTime = glfwGetTime();
+        m_lastClickTime = now;
     }
 
     if (glfwGetMouseButton(m_window, GLFW_MOUSE_BUTTON_RIGHT) == GLFW_PRESS &&
-        found && m_creativeMode &&
-        glfwGetTime() - m_lastClickTime > 0.15) {
+        found && m_creativeMode && now - m_lastClickTime > 0.15) {
         m_world.setBlock((int)hitBlock.x, (int)hitBlock.y + 1,
                          (int)hitBlock.z, BLOCK_GRASS);
         int cx = (int)hitBlock.x / Chunk::WIDTH;
         int cz = (int)hitBlock.z / Chunk::DEPTH;
         m_world.markMeshDirty(cx, cz);
-        m_lastClickTime = glfwGetTime();
+        m_lastClickTime = now;
     }
 }
 

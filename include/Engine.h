@@ -17,9 +17,6 @@
 
 namespace voxel {
 
-// Engine ties together the window, OpenGL context, shader, camera, world,
-// UI, and save system. It runs the game loop and manages state transitions
-// between the main menu, world selection, playing, creative, and paused.
 class Engine {
 public:
     Engine();
@@ -28,12 +25,8 @@ public:
     Engine(const Engine&) = delete;
     Engine& operator=(const Engine&) = delete;
 
-    // Initialise GLFW, OpenGL (via GLAD), resources and the save system.
     bool init(int width, int height, const char* title);
-
-    // Main loop. Returns when the window should close.
     int run();
-
     void shutdown();
 
     [[nodiscard]] GLFWwindow* window() const { return m_window; }
@@ -43,20 +36,7 @@ public:
     [[nodiscard]] bool isCreative() const { return m_creativeMode; }
     void setCreative(bool creative);
 
-    // GLFW callbacks (static so they can be passed to GLFW).
-    static void framebufferSizeCallback(GLFWwindow* window, int width,
-                                        int height);
-    static void cursorPosCallback(GLFWwindow* window, double xpos,
-                                  double ypos);
-    static void mouseButtonCallback(GLFWwindow* window, int button, int action,
-                                    int mods);
-    static void scrollCallback(GLFWwindow* window, double xoffset,
-                               double yoffset);
-    static void keyCallback(GLFWwindow* window, int key, int scancode, int action,
-                            int mods);
-
 private:
-    // State handlers.
     void updateMainMenu(float deltaTime);
     void updateWorldMenu(float deltaTime);
     void updatePlaying(float deltaTime);
@@ -66,14 +46,12 @@ private:
     void renderWorldMenu();
     void renderPlaying();
     void renderPaused();
+    void renderDebugOverlay();
 
-    // World / save operations.
     void loadChunksAroundPlayer();
     void updateChunks();
     void selectWorld(const std::string& name);
     void createWorld(const std::string& name);
-
-    // Block interaction (creative mode).
     void handleBlockInteraction();
 
     GLFWwindow* m_window = nullptr;
@@ -82,6 +60,7 @@ private:
 
     GameState m_state = GameState::MAIN_MENU;
     bool m_creativeMode = false;
+    bool m_debugOverlay = false;
 
     Shader m_shader;
     TextureAtlas m_atlas;
@@ -92,7 +71,6 @@ private:
 
     double m_lastTime = 0.0;
 
-    // UI state.
     std::vector<UIButton> m_menuButtons;
     std::vector<UIButton> m_worldButtons;
     std::vector<UIButton> m_pausedButtons;
@@ -101,17 +79,23 @@ private:
     int m_hoveredButton = -1;
     double m_lastClickTime = 0.0;
 
-    // Render distance in chunks.
-    static constexpr int RENDER_DISTANCE = 8;
+    static constexpr int RENDER_DISTANCE = 6;
+    static constexpr int MAX_GEN_PER_FRAME = 2;
+    static constexpr int MAX_MESH_PER_FRAME = 2;
 
-    // Mouse state.
     bool m_firstMouse = true;
     double m_lastX = 0.0;
     double m_lastY = 0.0;
     bool m_cursorCaptured = false;
+    bool m_f1Held = false;
+    bool m_escHeld = false;
+    bool m_wireframe = false;
 
-    // Main menu auto-start timer.
-    float m_menuAutoStartTimer = 0.0f;
+    static void framebufferSizeCallback(GLFWwindow* window, int width, int height);
+    static void cursorPosCallback(GLFWwindow* window, double xpos, double ypos);
+    static void mouseButtonCallback(GLFWwindow* window, int button, int action, int mods);
+    static void scrollCallback(GLFWwindow* window, double xoffset, double yoffset);
+    static void keyCallback(GLFWwindow* window, int key, int scancode, int action, int mods);
 };
 
 } // namespace voxel
